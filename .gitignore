@@ -1,0 +1,10 @@
+# Root .gitignore
+.env
+docker-compose.override.yml
+*/vendor/
+*/node_modules/
+*/var/
+*/storage/app/
+*/storage/framework/
+*/storage/logs/
+!*/storage/.gitkeep

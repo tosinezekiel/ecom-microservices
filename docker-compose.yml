@@ -1,0 +1,182 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  # Shopping Service (Symfony)
+  shopping-service:
+    build:
+      context: ./shopping-service
+      dockerfile: Dockerfile
+    ports:
+      - "8083:80"
+    volumes:
+      - ./shopping-service:/var/www/html
+    depends_on:
+      - mysql
+      - redis
+      - elasticsearch
+      - rabbitmq
+    environment:
+      DATABASE_URL: "mysql://user:password@mysql:3306/shopping_db"
+      REDIS_URL: "redis://redis:6379"
+      RABBITMQ_URL: "amqp://user:password@rabbitmq:5672"
+      ELASTICSEARCH_URL: "http://elasticsearch:9200"
+
+  # Order Service (Symfony)
+  order-service:
+    build:
+      context: ./order-service
+      dockerfile: Dockerfil
+    ports:
+      - "8082:80"
+    volumes:
+      - ./order-service:/var/www/html
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+    environment:
+      DATABASE_URL: "mysql://user:password@mysql:3306/order_db"
+      REDIS_URL: "redis://redis:6379"
+      RABBITMQ_URL: "amqp://user:password@rabbitmq:5672"
+
+  # Notification Service (Laravel)
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    ports:
+      - "8084:80"
+    volumes:
+      - ./notification-service:/var/www/html
+    depends_on:
+      - redis
+      - rabbitmq
+    environment:
+      REDIS_URL: "redis://redis:6379"
+      RABBITMQ_URL: "amqp://user:password@rabbitmq:5672"
+
+  user-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    ports:
+      - "8081:80"
+    volumes:
+      - ./notification-service:/var/www/html
+    depends_on:
+      - redis
+      - rabbitmq
+    environment:
+      REDIS_URL: "redis://redis:6379"
+      RABBITMQ_URL: "amqp://user:password@rabbitmq:5672"
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    ports:
+      - "3000:80"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_USER_URL=http://localhost:8001
+      - VITE_API_SHOPPING_URL=http://localhost:8003
+      - VITE_API_ORDER_URL=http://localhost:8002
+      - VITE_API_NOTIFICATION_URL=http://localhost:8004
+    networks:
+      - app-network
+
+  # MySQL
+  mysql-shopping:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_SHOPPING_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_SHOPPING_DATABASE}
+      MYSQL_USER: ${MYSQL_SHOPPING_USER}
+      MYSQL_PASSWORD: ${MYSQL_SHOPPING_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+
+  # MySQL
+  mysql-order:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ORDER_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_ORDER_DATABASE}
+      MYSQL_USER: ${MYSQL_ORDER_USER}
+      MYSQL_PASSWORD: ${MYSQL_ORDER_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+
+  # MySQL
+  mysql-user:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_MAIN_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_MAIN_DATABASE}
+      MYSQL_USER: ${MYSQL_MAIN_USER}
+      MYSQL_PASSWORD: ${MYSQL_MAIN_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+
+  # Redis
+  redis:
+    image: redis:6.2-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3.9-management
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOSTS: mysql-shopping,mysql-order,mysql-user
+      PMA_USER: root
+      PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    networks:
+      - app-network
+    depends_on:
+      - mysql-shopping
+      - mysql-order
+      - mysql-user
+
+  # Elasticsearch
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.14.0
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+
+volumes:
+  mysql_data:
+  redis_data:
+  rabbitmq_data:
+  elasticsearch_data:
