@@ -1,77 +1,107 @@
-# docker-compose.yml
-version: '3.8'
-
 services:
-  # Shopping Service (Symfony)
-  shopping-service:
-    build:
-      context: ./shopping-service
-      dockerfile: Dockerfile
+  shopping-nginx:
+    image: nginx:alpine
     ports:
       - "8083:80"
     volumes:
       - ./shopping-service:/var/www/html
+      - ./docker/nginx/shopping.conf:/etc/nginx/conf.d/default.conf
     depends_on:
-      - mysql
+      - shopping-service
+    networks:
+      - app-network
+
+  shopping-service:
+    build:
+      context: ./shopping-service
+      dockerfile: Dockerfile
+    depends_on:
+      - mysql-shopping
       - redis
       - elasticsearch
       - rabbitmq
     environment:
-      DATABASE_URL: "mysql://user:password@mysql:3306/shopping_db"
+      DATABASE_URL: "mysql://${MYSQL_SHOPPING_USER}:${MYSQL_SHOPPING_PASSWORD}@mysql:3306/${MYSQL_SHOPPING_DATABASE}"
       REDIS_URL: "redis://redis:6379"
-      RABBITMQ_URL: "amqp://user:password@rabbitmq:5672"
+      RABBITMQ_URL: "amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672"
       ELASTICSEARCH_URL: "http://elasticsearch:9200"
 
-  # Order Service (Symfony)
-  order-service:
-    build:
-      context: ./order-service
-      dockerfile: Dockerfil
+  order-nginx:
+    image: nginx:alpine
     ports:
       - "8082:80"
     volumes:
       - ./order-service:/var/www/html
+      - ./docker/nginx/order.conf:/etc/nginx/conf.d/default.conf
     depends_on:
-      - mysql
+      - order-service
+    networks:
+      - app-network
+
+  order-service:
+    build:
+      context: ./order-service
+      dockerfile: Dockerfile
+    depends_on:
+      - mysql-order
       - redis
       - rabbitmq
     environment:
-      DATABASE_URL: "mysql://user:password@mysql:3306/order_db"
+      DATABASE_URL: "mysql://${MYSQL_ORDER_USER}:${MYSQL_ORDER_PASSWORD}@mysql:3306/${MYSQL_ORDER_DATABASE}"
       REDIS_URL: "redis://redis:6379"
-      RABBITMQ_URL: "amqp://user:password@rabbitmq:5672"
+      RABBITMQ_URL: "amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672"
 
-  # Notification Service (Laravel)
-  notification-service:
-    build:
-      context: ./notification-service
-      dockerfile: Dockerfile
+  notification-nginx:
+    image: nginx:alpine
     ports:
       - "8084:80"
     volumes:
       - ./notification-service:/var/www/html
+      - ./docker/nginx/notification.conf:/etc/nginx/conf.d/default.conf
     depends_on:
-      - redis
-      - rabbitmq
-    environment:
-      REDIS_URL: "redis://redis:6379"
-      RABBITMQ_URL: "amqp://user:password@rabbitmq:5672"
-
-  user-service:
+      - notification-service
+    networks:
+      - app-network
+  
+  notification-service:
     build:
       context: ./notification-service
       dockerfile: Dockerfile
-    ports:
-      - "8081:80"
-    volumes:
-      - ./notification-service:/var/www/html
     depends_on:
       - redis
       - rabbitmq
     environment:
       REDIS_URL: "redis://redis:6379"
-      RABBITMQ_URL: "amqp://user:password@rabbitmq:5672"
+      RABBITMQ_URL: "amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672"
 
-  # Frontend
+  user-nginx:
+    image: nginx:alpine
+    ports:
+      - "8081:80"
+    volumes:
+      - ./user-service:/var/www/html
+      - ./docker/nginx/user.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - user-service
+    networks:
+      - app-network
+
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    depends_on:
+      - mysql-user
+      - redis
+      - rabbitmq
+    environment:
+      - DB_CONNECTION=mysql
+      - DB_HOST=mysql-user
+      - DB_PORT=3306
+      - DB_DATABASE=${MYSQL_MAIN_DATABASE}
+      - DB_USERNAME=${MYSQL_MAIN_USER}
+      - DB_PASSWORD=${MYSQL_MAIN_PASSWORD}
+
   frontend:
     build:
       context: ./frontend
@@ -90,7 +120,6 @@ services:
     networks:
       - app-network
 
-  # MySQL
   mysql-shopping:
     image: mysql:8.0
     environment:
@@ -99,11 +128,11 @@ services:
       MYSQL_USER: ${MYSQL_SHOPPING_USER}
       MYSQL_PASSWORD: ${MYSQL_SHOPPING_PASSWORD}
     volumes:
-      - mysql_data:/var/lib/mysql
+      - mysql_shopping_data:/var/lib/mysql
     ports:
-      - "3306:3306"
+      - "3307:3306"
+    command: --default-authentication-plugin=mysql_native_password
 
-  # MySQL
   mysql-order:
     image: mysql:8.0
     environment:
@@ -112,11 +141,11 @@ services:
       MYSQL_USER: ${MYSQL_ORDER_USER}
       MYSQL_PASSWORD: ${MYSQL_ORDER_PASSWORD}
     volumes:
-      - mysql_data:/var/lib/mysql
+      - mysql_order_data:/var/lib/mysql
     ports:
-      - "3306:3306"
+      - "3308:3306"
+    command: --default-authentication-plugin=mysql_native_password
 
-  # MySQL
   mysql-user:
     image: mysql:8.0
     environment:
@@ -125,11 +154,11 @@ services:
       MYSQL_USER: ${MYSQL_MAIN_USER}
       MYSQL_PASSWORD: ${MYSQL_MAIN_PASSWORD}
     volumes:
-      - mysql_data:/var/lib/mysql
+      - mysql_user_data:/var/lib/mysql
     ports:
-      - "3306:3306"
+      - "3309:3306"
+    command: --default-authentication-plugin=mysql_native_password
 
-  # Redis
   redis:
     image: redis:6.2-alpine
     ports:
@@ -137,12 +166,11 @@ services:
     volumes:
       - redis_data:/data
 
-  # RabbitMQ
   rabbitmq:
     image: rabbitmq:3.9-management
     environment:
-      RABBITMQ_DEFAULT_USER: user
-      RABBITMQ_DEFAULT_PASS: password
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -150,11 +178,12 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
 
   phpmyadmin:
-    image: phpmyadmin/phpmyadmin
+    image: arm64v8/phpmyadmin
     ports:
       - "8080:80"
     environment:
       PMA_HOSTS: mysql-shopping,mysql-order,mysql-user
+      PMA_PORTS: 3306,3306,3306
       PMA_USER: root
       PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     networks:
@@ -175,8 +204,17 @@ services:
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
 
+networks:
+  app-network:
+    driver: bridge
+
 volumes:
-  mysql_data:
+  mysql_shopping_data:
+    name: mysql_shopping_data
+  mysql_order_data:
+    name: mysql_order_data
+  mysql_user_data:
+    name: mysql_user_data
   redis_data:
   rabbitmq_data:
   elasticsearch_data:

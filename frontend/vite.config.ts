@@ -1,4 +1,3 @@
-// frontend/vite.config.ts
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
@@ -11,18 +10,32 @@ export default defineConfig({
     }
   },
   server: {
-    host: '0.0.0.0',
-    port: 8080,
+    host: '0.0.0.0',  // Required for Docker
+    port: 3000,
+    watch: {
+      usePolling: true  // Required for hot reload in Docker
+    },
     proxy: {
-      '/api/shopping': {
-        target: 'http://shopping-nginx',
+      // Proxy API requests
+      '/api/users': {
+        target: 'http://localhost:8081',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/shopping/, '/api')
+        rewrite: (path) => path.replace(/^\/api\/users/, '')
       },
-      '/api/order': {
-        target: 'http://order-nginx',
+      '/api/orders': {
+        target: 'http://localhost:8082',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/order/, '/api')
+        rewrite: (path) => path.replace(/^\/api\/orders/, '')
+      },
+      '/api/products': {
+        target: 'http://localhost:8083',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/products/, '')
+      },
+      '/api/notifications': {
+        target: 'http://localhost:8084',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/notifications/, '')
       }
     }
   }
